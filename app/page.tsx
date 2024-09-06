@@ -1,113 +1,162 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { useTodos } from "@/services/queries";
+import {
+  useCreatetTodo,
+  useDeleteTodo,
+  useUpdateTodo,
+} from "@/services/mutations";
+import { Todo } from "@/types/todos";
+import { SubmitHandler, useForm } from "react-hook-form";
 
 export default function Home() {
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:size-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const [page, setPage] = useState<number>(1);
+  const [updatingTodoId, setUpdatingTodoId] = useState<number | null>(null);
+  const [deletingTodoId, setDeletingTodoId] = useState<number | null>(null);
+  const { data, isPending, isError, refetch, isPlaceholderData, isFetching } =
+    useTodos(page);
+  const { register, handleSubmit } = useForm<Todo>();
+  const createTodoMutation = useCreatetTodo();
+  const updateTodoMutation = useUpdateTodo();
+  const deleteTodoMutation = useDeleteTodo();
+
+  const handleCreateTodo: SubmitHandler<Todo> = (data) => {
+    createTodoMutation.mutate(data);
+  };
+
+  const handleMarkasDoneSubmit = (data: Todo) => {
+    setUpdatingTodoId(data.id); // Set the current updating todo ID
+    updateTodoMutation.mutate(
+      { ...data, checked: true },
+      {
+        onSuccess: () => {
+          // Update the local state of todos after successful mutation
+          refetch(); // Refetch the todos to get the updated state from the server
+          setUpdatingTodoId(null); // Reset after the mutation is done
+        },
+        onError: () => {
+          setUpdatingTodoId(null); // Reset if there is an error
+        },
+      }
+    );
+  };
+
+  const handleDeleteTodo = (id: number) => {
+    setDeletingTodoId(id); // Set the current deleting todo ID
+    deleteTodoMutation.mutate(id, {
+      onSuccess: () => {
+        // Invalidate the todos query to refetch updated data
+        // todoQuery.refetch(); // Refetch the todos to get the updated state from the server
+        setDeletingTodoId(null); // Reset after the mutation is done
+      },
+      onError: () => {
+        setDeletingTodoId(null); // Reset if there is an error
+      },
+    });
+  };
+
+  const renderTodoList = () => {
+    if (isPending) {
+      return <span className="m-4 text-gray-500">Loading...</span>;
+    }
+    if (isError) {
+      return <span className="m-4 text-red-500">There is an error</span>;
+    }
+
+    return ( 
+      <>
+        <ul>
+          {data.map((item: Todo, index: number) => (
+            <li
+              key={item.id}
+              className={`p-3 border-b ${
+                index % 2 === 0 ? "bg-white" : "bg-gray-100"
+              }`}
+            >
+              <span className="mr-2">{item.id }</span> <strong>Title</strong>{" "}
+              {item.title}
+              {" ,"} <strong>Description</strong> {item.description}{" "}
+              <button
+                className="text-white bg-black mr-2 rounded p-1"
+                onClick={() => handleMarkasDoneSubmit(item)}
+                disabled={item.checked || updatingTodoId === item.id}
+              >
+                {updatingTodoId === item.id
+                  ? "Updating Todo"
+                  : item.checked
+                  ? "Done"
+                  : "Mark as done"}
+              </button>
+              <button
+                className="bg-red-700 text-white rounded p-1"
+                onClick={() => handleDeleteTodo(item.id)}
+                disabled={deletingTodoId === item.id}
+              >
+                {deletingTodoId === item.id ? "Deleting..." : "Delete"}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="flex space-x-2 mt-6">
+          <span className="font-bold">Currrent page: {page}</span>
+          <button
+            className="text-white bg-black"
+            onClick={() => {
+              setPage((old) => old - 1);
+            }}
           >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
+            Previous page
+          </button>
+          <button
+            className="text-white bg-black"
+            onClick={() => {
+              if (!isPlaceholderData) {
+                setPage((old) => old + 1);
+              }
+            }}
+          >
+            Next page
+          </button>
+          <span>{isFetching ? "Loading..." : null}</span>
         </div>
+      </>
+    );
+  };
+
+  return (
+    <div className="m-8">
+      <div className="">
+        <form
+          className="space-y-4 flex flex-col items-center w-[300px] p-4 border border-gray-300 rounded-lg shadow-sm"
+          onSubmit={handleSubmit(handleCreateTodo)}
+        >
+          <h4 className="text-xl font-semibold mb-2">New Todo</h4>
+          <input
+            className="w-full px-3 py-2 border border-slate-400 rounded focus:outline-none focus:ring-2 focus:ring-black"
+            placeholder="Title"
+            {...register("title")}
+          />
+          <input
+            className="w-full px-3 py-2 border border-slate-400 rounded focus:outline-none focus:ring-2 focus:ring-black"
+            placeholder="Description"
+            {...register("description")}
+          />
+          <input
+            type="submit"
+            disabled={createTodoMutation.isPending}
+            value={createTodoMutation.isPending ? "Creating..." : "Create todo"}
+            className={`w-full py-2 bg-gray-800 text-white rounded hover:bg-slate-600 transition duration-200 ease-in-out disabled:bg-gray-400 ${
+              createTodoMutation.isPending
+                ? "cursor-progress"
+                : "cursor-pointer"
+            }`}
+          />
+        </form>
       </div>
 
-      <div className="relative z-[-1] flex place-items-center before:absolute before:h-[300px] before:w-full before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 sm:before:w-[480px] sm:after:w-[240px] before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
-
-      <div className="mb-32 grid text-center lg:mb-0 lg:w-full lg:max-w-5xl lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-balance text-sm opacity-50">
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
+      <h2 className="mt-4 font-bold underline">Todo List</h2>
+      <ul className="list-none p-0">{renderTodoList()}</ul>
+    </div>
   );
 }
